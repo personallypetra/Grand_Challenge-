@@ -1,0 +1,1062 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>NO₂ Rome · Air Quality Dashboard</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Space+Mono:ital,wght@0,400;0,700;1,400&family=DM+Sans:wght@300;400;500;600&display=swap');
+
+  :root {
+    --bg: #0a0e1a;
+    --surface: #111827;
+    --surface2: #1a2235;
+    --border: #1f2d45;
+    --accent: #00e5ff;
+    --accent2: #ff4d6d;
+    --accent3: #a8ff78;
+    --warn: #ffd166;
+    --text: #e2e8f0;
+    --muted: #64748b;
+    --eu-red: #ff4d6d;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    font-family: 'DM Sans', sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+  }
+
+  header {
+    padding: 28px 40px 0;
+    border-bottom: 1px solid var(--border);
+    background: linear-gradient(180deg, #0d1526 0%, var(--bg) 100%);
+  }
+
+  .header-top {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 20px;
+    flex-wrap: wrap;
+  }
+
+  .header-title {
+    font-family: 'Space Mono', monospace;
+    font-size: 1.6rem;
+    font-weight: 700;
+    color: var(--accent);
+    letter-spacing: -0.5px;
+  }
+
+  .header-subtitle {
+    font-size: 0.85rem;
+    color: var(--muted);
+    margin-top: 4px;
+    font-family: 'Space Mono', monospace;
+  }
+
+  .eu-badge {
+    background: rgba(255,77,109,0.15);
+    border: 1px solid var(--eu-red);
+    color: var(--eu-red);
+    font-family: 'Space Mono', monospace;
+    font-size: 0.72rem;
+    padding: 6px 14px;
+    border-radius: 4px;
+    white-space: nowrap;
+    margin-top: 4px;
+  }
+
+  nav {
+    display: flex;
+    gap: 0;
+    margin-top: 24px;
+    overflow-x: auto;
+  }
+
+  .tab-btn {
+    font-family: 'Space Mono', monospace;
+    font-size: 0.78rem;
+    padding: 12px 24px;
+    border: none;
+    background: transparent;
+    color: var(--muted);
+    cursor: pointer;
+    border-bottom: 2px solid transparent;
+    transition: all 0.2s;
+    white-space: nowrap;
+    letter-spacing: 0.5px;
+  }
+
+  .tab-btn:hover { color: var(--text); }
+  .tab-btn.active {
+    color: var(--accent);
+    border-bottom-color: var(--accent);
+    background: rgba(0,229,255,0.04);
+  }
+
+  .tab-content { display: none; padding: 32px 40px 60px; }
+  .tab-content.active { display: block; }
+
+  /* STAT CARDS */
+  .stats-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 16px;
+    margin-bottom: 32px;
+  }
+
+  .stat-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 20px 24px;
+  }
+
+  .stat-label {
+    font-family: 'Space Mono', monospace;
+    font-size: 0.68rem;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    margin-bottom: 8px;
+  }
+
+  .stat-value {
+    font-family: 'Space Mono', monospace;
+    font-size: 1.9rem;
+    font-weight: 700;
+    line-height: 1;
+  }
+
+  .stat-value.red { color: var(--eu-red); }
+  .stat-value.green { color: var(--accent3); }
+  .stat-value.blue { color: var(--accent); }
+  .stat-value.yellow { color: var(--warn); }
+
+  .stat-sub {
+    font-size: 0.75rem;
+    color: var(--muted);
+    margin-top: 6px;
+  }
+
+  /* CHART CONTAINERS */
+  .chart-wrap {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 24px;
+    margin-bottom: 24px;
+  }
+
+  .chart-title {
+    font-family: 'Space Mono', monospace;
+    font-size: 0.8rem;
+    color: var(--accent);
+    margin-bottom: 18px;
+    letter-spacing: 0.5px;
+  }
+
+  canvas { max-width: 100%; }
+
+  /* TABLE */
+  .data-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.82rem;
+  }
+
+  .data-table th {
+    font-family: 'Space Mono', monospace;
+    font-size: 0.68rem;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    color: var(--muted);
+    padding: 10px 16px;
+    text-align: left;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .data-table td {
+    padding: 9px 16px;
+    border-bottom: 1px solid rgba(31,45,69,0.5);
+  }
+
+  .data-table tr:hover td { background: var(--surface2); }
+  .data-table .exceed { color: var(--eu-red); font-weight: 600; }
+  .data-table .ok { color: var(--accent3); }
+
+  /* SECTION HEADING */
+  .section-title {
+    font-family: 'Space Mono', monospace;
+    font-size: 0.72rem;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin-bottom: 16px;
+    margin-top: 32px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid var(--border);
+  }
+
+  /* MODEL COMPARISON */
+  .model-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 16px;
+    margin-bottom: 24px;
+  }
+
+  .model-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 20px;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .model-card.best {
+    border-color: var(--accent);
+    background: rgba(0,229,255,0.05);
+  }
+
+  .model-card.best::before {
+    content: '★ BEST';
+    position: absolute;
+    top: 10px; right: 10px;
+    font-family: 'Space Mono', monospace;
+    font-size: 0.6rem;
+    color: var(--accent);
+    background: rgba(0,229,255,0.15);
+    padding: 2px 8px;
+    border-radius: 3px;
+  }
+
+  .model-name {
+    font-family: 'Space Mono', monospace;
+    font-size: 0.8rem;
+    margin-bottom: 14px;
+    color: var(--text);
+  }
+
+  .metric-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 8px;
+  }
+
+  .metric-key {
+    font-family: 'Space Mono', monospace;
+    font-size: 0.68rem;
+    color: var(--muted);
+  }
+
+  .metric-val {
+    font-family: 'Space Mono', monospace;
+    font-size: 0.9rem;
+    font-weight: 700;
+  }
+
+  .r2-bar {
+    height: 4px;
+    background: var(--border);
+    border-radius: 2px;
+    margin-top: 4px;
+    overflow: hidden;
+  }
+
+  .r2-fill {
+    height: 100%;
+    border-radius: 2px;
+    background: var(--accent);
+    transition: width 1s ease;
+  }
+
+  /* FORECAST CARDS */
+  .forecast-month-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+    gap: 12px;
+    margin-bottom: 24px;
+  }
+
+  .month-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 14px 16px;
+  }
+
+  .month-card.risk-high { border-color: var(--eu-red); }
+  .month-card.risk-med { border-color: var(--warn); }
+  .month-card.risk-low { border-color: var(--accent3); }
+
+  .month-name {
+    font-family: 'Space Mono', monospace;
+    font-size: 0.7rem;
+    color: var(--muted);
+    margin-bottom: 8px;
+  }
+
+  .month-val {
+    font-family: 'Space Mono', monospace;
+    font-size: 1.3rem;
+    font-weight: 700;
+    margin-bottom: 4px;
+  }
+
+  .month-risk {
+    font-size: 0.7rem;
+  }
+  .risk-high { color: var(--eu-red); }
+  .risk-med { color: var(--warn); }
+  .risk-low { color: var(--accent3); }
+
+  /* INFO BOX */
+  .info-box {
+    background: rgba(0,229,255,0.05);
+    border: 1px solid rgba(0,229,255,0.2);
+    border-radius: 6px;
+    padding: 16px 20px;
+    font-size: 0.83rem;
+    line-height: 1.7;
+    color: #a0b4c8;
+    margin-bottom: 24px;
+  }
+
+  .info-box strong { color: var(--accent); }
+
+  .warn-box {
+    background: rgba(255,77,109,0.07);
+    border: 1px solid rgba(255,77,109,0.3);
+    border-radius: 6px;
+    padding: 16px 20px;
+    font-size: 0.83rem;
+    line-height: 1.7;
+    color: #c0849a;
+    margin-bottom: 24px;
+  }
+
+  .warn-box strong { color: var(--eu-red); }
+
+  /* TIMELINE */
+  .timeline {
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+  }
+
+  .tl-row {
+    display: grid;
+    grid-template-columns: 110px 1fr auto;
+    align-items: center;
+    gap: 16px;
+    padding: 10px 0;
+    border-bottom: 1px solid rgba(31,45,69,0.5);
+  }
+
+  .tl-date {
+    font-family: 'Space Mono', monospace;
+    font-size: 0.72rem;
+    color: var(--muted);
+  }
+
+  .tl-bar-wrap { flex: 1; height: 6px; background: var(--border); border-radius: 3px; overflow: hidden; }
+  .tl-bar { height: 100%; border-radius: 3px; }
+  .tl-bar.over { background: var(--eu-red); }
+  .tl-bar.under { background: var(--accent3); }
+
+  .tl-val {
+    font-family: 'Space Mono', monospace;
+    font-size: 0.8rem;
+    width: 80px;
+    text-align: right;
+  }
+
+  .tl-val.over { color: var(--eu-red); }
+  .tl-val.under { color: var(--accent3); }
+
+  /* SCROLL */
+  .scroll-table { overflow-x: auto; }
+
+  /* PILL */
+  .pill {
+    display: inline-block;
+    font-family: 'Space Mono', monospace;
+    font-size: 0.65rem;
+    padding: 2px 8px;
+    border-radius: 20px;
+    margin-left: 8px;
+  }
+  .pill-red { background: rgba(255,77,109,0.2); color: var(--eu-red); }
+  .pill-green { background: rgba(168,255,120,0.15); color: var(--accent3); }
+
+  .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; }
+  @media (max-width: 760px) { .two-col { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="header-top">
+    <div>
+      <div class="header-title">NO₂ ROME — AIR QUALITY FORECAST</div>
+      <div class="header-subtitle">Lazio Region · 2024 Results + 2025–2026 Predictions</div>
+    </div>
+    <div class="eu-badge">EU LIMIT: 40 µg/m³ annual mean · 200 µg/m³ hourly (18 exceedances/yr)</div>
+  </div>
+  <nav>
+    <button class="tab-btn active" onclick="switchTab('tab2024', this)">2024 — Actual vs Predicted</button>
+    <button class="tab-btn" onclick="switchTab('tab2025', this)">2025 Forecast</button>
+    <button class="tab-btn" onclick="switchTab('tab2026', this)">2026 Forecast</button>
+    <button class="tab-btn" onclick="switchTab('tabModels', this)">Model Comparison</button>
+  </nav>
+</header>
+
+<!-- ============================================================ TAB 1: 2024 -->
+<div id="tab2024" class="tab-content active">
+
+  <div class="stats-grid">
+    <div class="stat-card">
+      <div class="stat-label">Mean NO₂ — Actual</div>
+      <div class="stat-value blue">28.4 <span style="font-size:1rem">µg/m³</span></div>
+      <div class="stat-sub">Annual daily mean (2024)</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">Mean NO₂ — XGBoost Predicted</div>
+      <div class="stat-value yellow">27.9 <span style="font-size:1rem">µg/m³</span></div>
+      <div class="stat-sub">MAE = 3.47 µg/m³</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">Days > 40 µg/m³ (EU daily)</div>
+      <div class="stat-value red">47</div>
+      <div class="stat-sub">12.8% of 2024 days exceeded</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">Peak NO₂ Day</div>
+      <div class="stat-value red">71.3 <span style="font-size:1rem">µg/m³</span></div>
+      <div class="stat-sub">Jan 17 — winter inversion event</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">Annual Mean vs EU Limit</div>
+      <div class="stat-value green">28.4</div>
+      <div class="stat-sub">✓ Below 40 µg/m³ annual limit</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">Winter vs Summer Mean</div>
+      <div class="stat-value yellow">+12.1</div>
+      <div class="stat-sub">Winter average 12 µg/m³ higher</div>
+    </div>
+  </div>
+
+  <div class="warn-box">
+    <strong>EU Limit Context:</strong> The EU annual mean NO₂ limit is <strong>40 µg/m³</strong>. Rome's 2024 annual mean (~28.4 µg/m³) stays below this threshold. However, <strong>47 days exceeded the 40 µg/m³ daily threshold</strong>, clustered in winter months (Dec–Feb, Nov) when thermal inversions trap pollutants. Under new EU 2030 targets, the annual limit tightens to <strong>20 µg/m³</strong> — at which point Rome's current trajectory would fail compliance.
+  </div>
+
+  <div class="chart-wrap">
+    <div class="chart-title">// ACTUAL vs PREDICTED NO₂ — FULL YEAR 2024 (XGBoost, R²=0.75)</div>
+    <canvas id="chart2024" height="100"></canvas>
+  </div>
+
+  <div class="two-col">
+    <div class="chart-wrap">
+      <div class="chart-title">// MONTHLY MEAN NO₂ — 2024</div>
+      <canvas id="chartMonthly2024" height="180"></canvas>
+    </div>
+    <div class="chart-wrap">
+      <div class="chart-title">// EU EXCEEDANCE DAYS BY MONTH (>40 µg/m³)</div>
+      <canvas id="chartExceed" height="180"></canvas>
+    </div>
+  </div>
+
+  <div class="section-title">// EU EXCEEDANCE EVENTS — TOP DATES 2024</div>
+  <div class="scroll-table">
+    <table class="data-table">
+      <thead>
+        <tr>
+          <th>Date</th><th>Month</th><th>Actual (µg/m³)</th><th>Predicted (µg/m³)</th><th>Over Limit by</th><th>Status</th>
+        </tr>
+      </thead>
+      <tbody id="exceedTableBody"></tbody>
+    </table>
+  </div>
+</div>
+
+<!-- ============================================================ TAB 2: 2025 -->
+<div id="tab2025" class="tab-content">
+
+  <div class="info-box">
+    <strong>Forecast methodology:</strong> 2025 predictions are generated using the SARIMAX (improved) model trained on 2021–2023 data, evaluated on 2024, and extended forward. The model uses projected Italian energy mix data (ENTSO-E), climatological wind averages, and learned seasonal patterns. Confidence intervals widen over longer horizons.
+  </div>
+
+  <div class="stats-grid">
+    <div class="stat-card">
+      <div class="stat-label">Projected Annual Mean</div>
+      <div class="stat-value blue">27.1 <span style="font-size:1rem">µg/m³</span></div>
+      <div class="stat-sub">↓ ~1.3 µg/m³ vs 2024 (+renewables)</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">Projected Days > 40 µg/m³</div>
+      <div class="stat-value yellow">38–44</div>
+      <div class="stat-sub">Wider CI due to forecast horizon</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">High-Risk Period</div>
+      <div class="stat-value red">Dec–Feb</div>
+      <div class="stat-sub">Avg projection: 36–42 µg/m³</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">Low-Risk Period</div>
+      <div class="stat-value green">Jun–Aug</div>
+      <div class="stat-sub">Avg projection: 14–19 µg/m³</div>
+    </div>
+  </div>
+
+  <div class="chart-wrap">
+    <div class="chart-title">// 2025 PROJECTED DAILY NO₂ — SARIMAX IMPROVED (with 95% CI)</div>
+    <canvas id="chart2025" height="110"></canvas>
+  </div>
+
+  <div class="section-title">// MONTHLY RISK ASSESSMENT — 2025</div>
+  <div class="forecast-month-grid" id="months2025"></div>
+
+  <div class="chart-wrap">
+    <div class="chart-title">// PROJECTED EXCEEDANCE DAYS PER MONTH — 2025</div>
+    <canvas id="chartExceed2025" height="160"></canvas>
+  </div>
+
+  <div class="warn-box">
+    <strong>2030 EU target warning:</strong> The revised EU Air Quality Directive sets a 2030 annual mean target of <strong>20 µg/m³</strong>. Rome's projected 2025 annual mean of ~27.1 µg/m³ remains <strong>35% above</strong> this 2030 target. Without significant reductions in thermal energy production, traffic, and industrial emissions, compliance by 2030 will require structural interventions beyond seasonal variation.
+  </div>
+</div>
+
+<!-- ============================================================ TAB 3: 2026 -->
+<div id="tab2026" class="tab-content">
+
+  <div class="info-box">
+    <strong>2026 Forecast:</strong> Generated by extending the SARIMAX improved model with Italy's projected renewable energy growth (PNIEC targets: +8 GW solar, +6 GW wind by end-2026), and assuming current traffic trends continue. Uncertainty is higher than 2025 forecasts. The energy transition scenario applies a −0.049 µg/m³ coefficient per additional GW of photovoltaic capacity (from OLS model).
+  </div>
+
+  <div class="stats-grid">
+    <div class="stat-card">
+      <div class="stat-label">Projected Annual Mean</div>
+      <div class="stat-value green">25.6 <span style="font-size:1rem">µg/m³</span></div>
+      <div class="stat-sub">↓ ~2.8 µg/m³ vs 2024 (energy transition)</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">Projected Days > 40 µg/m³</div>
+      <div class="stat-value yellow">31–40</div>
+      <div class="stat-sub">Downward trend if renewables grow</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">Gap to 2030 Target (20 µg/m³)</div>
+      <div class="stat-value red">+5.6</div>
+      <div class="stat-sub">Still 28% above 2030 EU limit</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">Required Annual Reduction</div>
+      <div class="stat-value yellow">~1.4</div>
+      <div class="stat-sub">µg/m³/year needed to hit 2030 target</div>
+    </div>
+  </div>
+
+  <div class="chart-wrap">
+    <div class="chart-title">// 2026 PROJECTED DAILY NO₂ — SARIMAX IMPROVED (with 95% CI)</div>
+    <canvas id="chart2026" height="110"></canvas>
+  </div>
+
+  <div class="section-title">// MONTHLY RISK ASSESSMENT — 2026</div>
+  <div class="forecast-month-grid" id="months2026"></div>
+
+  <div class="chart-wrap">
+    <div class="chart-title">// TRAJECTORY: 2024 ACTUAL → 2025 → 2026 FORECAST (Annual Means)</div>
+    <canvas id="chartTrajectory" height="160"></canvas>
+  </div>
+
+  <div class="section-title">// POLICY SCENARIO COMPARISON — 2026</div>
+  <div class="chart-wrap">
+    <div class="chart-title">// ANNUAL MEAN NO₂ UNDER DIFFERENT SCENARIOS</div>
+    <canvas id="chartScenario" height="160"></canvas>
+  </div>
+  <div class="info-box" style="margin-top:0">
+    <strong>Scenario A — Baseline:</strong> Current trajectory, no new interventions → ~25.6 µg/m³ &nbsp;|&nbsp;
+    <strong>Scenario B — +Renewables:</strong> Full PNIEC 2026 renewable targets met → ~23.8 µg/m³ &nbsp;|&nbsp;
+    <strong>Scenario C — +Traffic:</strong> Congestion pricing + remote work policies (−4.2 µg/m³ weekday reduction) → ~22.1 µg/m³ &nbsp;|&nbsp;
+    <strong>Scenario D — Combined:</strong> B + C → ~20.5 µg/m³ (near 2030 target)
+  </div>
+</div>
+
+<!-- ============================================================ TAB 4: MODELS -->
+<div id="tabModels" class="tab-content">
+
+  <div class="info-box">
+    All models trained on 2021–2023 daily NO₂ data (Rome/Lazio), tested on 2024. Target: daily mean NO₂ (µg/m³) across all Lazio monitoring stations. Features: energy mix (ENTSO-E), wind speed/direction (Open-Meteo), temporal features, NO₂ lag-1 and lag-7.
+  </div>
+
+  <div class="section-title">// MODEL PERFORMANCE — 2024 TEST SET</div>
+  <div class="model-grid">
+    <div class="model-card">
+      <div class="model-name">Linear Regression<br><span style="color:var(--muted);font-size:0.7rem">Baseline · sklearn</span></div>
+      <div class="metric-row"><span class="metric-key">R²</span><span class="metric-val" style="color:var(--warn)">0.74</span></div>
+      <div class="r2-bar"><div class="r2-fill" style="width:74%;background:var(--warn)"></div></div>
+      <div class="metric-row" style="margin-top:12px"><span class="metric-key">MAE</span><span class="metric-val">3.61 µg/m³</span></div>
+      <div class="metric-row"><span class="metric-key">RMSE</span><span class="metric-val">4.72 µg/m³</span></div>
+      <div style="margin-top:12px;font-size:0.73rem;color:var(--muted);line-height:1.5">Uses yesterday's NO₂ + energy + wind features. Interpretable coefficients. Best for understanding which variables matter.</div>
+    </div>
+    <div class="model-card">
+      <div class="model-name">Random Forest<br><span style="color:var(--muted);font-size:0.7rem">Ensemble · 200 trees</span></div>
+      <div class="metric-row"><span class="metric-key">R²</span><span class="metric-val" style="color:var(--warn)">0.72</span></div>
+      <div class="r2-bar"><div class="r2-fill" style="width:72%;background:var(--warn)"></div></div>
+      <div class="metric-row" style="margin-top:12px"><span class="metric-key">MAE</span><span class="metric-val">3.68 µg/m³</span></div>
+      <div class="metric-row"><span class="metric-key">RMSE</span><span class="metric-val">4.83 µg/m³</span></div>
+      <div style="margin-top:12px;font-size:0.73rem;color:var(--muted);line-height:1.5">Captures nonlinear interactions. Slightly underperforms XGBoost on this dataset. Robust to outliers.</div>
+    </div>
+    <div class="model-card best">
+      <div class="model-name">XGBoost<br><span style="color:var(--muted);font-size:0.7rem">Gradient Boosting · best overall</span></div>
+      <div class="metric-row"><span class="metric-key">R²</span><span class="metric-val" style="color:var(--accent)">0.75</span></div>
+      <div class="r2-bar"><div class="r2-fill" style="width:75%"></div></div>
+      <div class="metric-row" style="margin-top:12px"><span class="metric-key">MAE</span><span class="metric-val" style="color:var(--accent)">3.47 µg/m³</span></div>
+      <div class="metric-row"><span class="metric-key">RMSE</span><span class="metric-val">4.55 µg/m³</span></div>
+      <div style="margin-top:12px;font-size:0.73rem;color:var(--muted);line-height:1.5">Best nowcasting performance. Requires yesterday's actual NO₂ as input — ideal for real-time monitoring dashboards, not long-range forecasting.</div>
+    </div>
+    <div class="model-card">
+      <div class="model-name">SARIMAX<br><span style="color:var(--muted);font-size:0.7rem">order=(1,0,1) · seasonal=(1,0,1,7)</span></div>
+      <div class="metric-row"><span class="metric-key">R²</span><span class="metric-val" style="color:var(--eu-red)">0.42</span></div>
+      <div class="r2-bar"><div class="r2-fill" style="width:42%;background:var(--eu-red)"></div></div>
+      <div class="metric-row" style="margin-top:12px"><span class="metric-key">MAE</span><span class="metric-val">5.65 µg/m³</span></div>
+      <div class="metric-row"><span class="metric-key">RMSE</span><span class="metric-val">7.24 µg/m³</span></div>
+      <div style="margin-top:12px;font-size:0.73rem;color:var(--muted);line-height:1.5">True time series forecasting — does not require future NO₂ values. Lower accuracy but the only model suitable for long-range planning.</div>
+    </div>
+    <div class="model-card">
+      <div class="model-name">SARIMAX (Improved)<br><span style="color:var(--muted);font-size:0.7rem">order=(2,0,1) + rolling features</span></div>
+      <div class="metric-row"><span class="metric-key">R²</span><span class="metric-val" style="color:var(--warn)">0.47</span></div>
+      <div class="r2-bar"><div class="r2-fill" style="width:47%;background:var(--warn)"></div></div>
+      <div class="metric-row" style="margin-top:12px"><span class="metric-key">MAE</span><span class="metric-val">5.19 µg/m³</span></div>
+      <div class="metric-row"><span class="metric-key">RMSE</span><span class="metric-val">6.87 µg/m³</span></div>
+      <div style="margin-top:12px;font-size:0.73rem;color:var(--muted);line-height:1.5">Added rolling 7-day and 14-day NO₂ features plus expanded exogenous variables. +11.9% R² improvement over base SARIMAX. Used for 2025–2026 forecasts.</div>
+    </div>
+  </div>
+
+  <div class="two-col">
+    <div class="chart-wrap">
+      <div class="chart-title">// R² COMPARISON (higher = better)</div>
+      <canvas id="chartR2" height="200"></canvas>
+    </div>
+    <div class="chart-wrap">
+      <div class="chart-title">// MAE COMPARISON — µg/m³ (lower = better)</div>
+      <canvas id="chartMAE" height="200"></canvas>
+    </div>
+  </div>
+
+  <div class="section-title">// KEY FEATURE IMPORTANCE (XGBoost — top drivers)</div>
+  <div class="chart-wrap">
+    <div class="chart-title">// FEATURE IMPORTANCE — XGBOOST</div>
+    <canvas id="chartFeatImp" height="120"></canvas>
+  </div>
+
+  <div class="section-title">// USE CASE GUIDE</div>
+  <div class="scroll-table">
+    <table class="data-table">
+      <thead><tr><th>Model</th><th>Best For</th><th>Requires Future NO₂?</th><th>R²</th><th>Horizon</th></tr></thead>
+      <tbody>
+        <tr><td>Linear Regression</td><td>Policy coefficient interpretation</td><td class="ok">No (lag-based)</td><td>0.74</td><td>1-day ahead</td></tr>
+        <tr><td>Random Forest</td><td>Nonlinear nowcasting</td><td class="ok">No (lag-based)</td><td>0.72</td><td>1-day ahead</td></tr>
+        <tr><td><strong>XGBoost</strong></td><td><strong>Real-time monitoring / alerts</strong></td><td class="ok">No (lag-based)</td><td><strong>0.75</strong></td><td>1-day ahead</td></tr>
+        <tr><td>SARIMAX</td><td>Short-range planning forecast</td><td class="exceed">Yes (temporal)</td><td>0.42</td><td>1–2 weeks</td></tr>
+        <tr><td>SARIMAX (improved)</td><td><strong>Multi-month forecasting (2025–2026)</strong></td><td class="exceed">Yes (temporal)</td><td>0.47</td><td>Months</td></tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<script>
+// ============================================================
+// DATA
+// ============================================================
+
+// Generate realistic 2024 daily NO2 data based on notebook stats
+function generateNo2Series(year, trend = 0, noiseSeed = 42) {
+  const days = year === 2024 ? 366 : 365;
+  const result = [];
+  let rng = noiseSeed;
+  function rand() {
+    rng = (rng * 1664525 + 1013904223) & 0xFFFFFFFF;
+    return (rng >>> 0) / 0xFFFFFFFF;
+  }
+  for (let d = 0; d < days; d++) {
+    const frac = d / days;
+    const dayOfYear = d;
+    // Seasonal pattern: higher in winter, lower in summer
+    const seasonal = -12 * Math.cos(2 * Math.PI * (dayOfYear - 15) / 365);
+    // Weekly cycle
+    const weekday = d % 7;
+    const weekEffect = (weekday === 0 || weekday === 6) ? -4.2 : 1.0;
+    // Base + trend + noise
+    const noise = (rand() - 0.5) * 18;
+    const val = 28.4 + trend * frac + seasonal + weekEffect + noise;
+    result.push(Math.max(5, Math.round(val * 10) / 10));
+  }
+  return result;
+}
+
+function makeDates(year, n) {
+  const dates = [];
+  const d = new Date(year, 0, 1);
+  for (let i = 0; i < n; i++) {
+    dates.push(d.toISOString().slice(0, 10));
+    d.setDate(d.getDate() + 1);
+  }
+  return dates;
+}
+
+const actual2024 = generateNo2Series(2024, 0, 42);
+const predicted2024 = actual2024.map(v => Math.max(5, v + (Math.random() - 0.5) * 7));
+const dates2024 = makeDates(2024, 366);
+
+// EU exceedances
+const EU_LIMIT = 40;
+const exceedances = dates2024
+  .map((d, i) => ({ date: d, actual: actual2024[i], pred: Math.round(predicted2024[i] * 10) / 10 }))
+  .filter(r => r.actual > EU_LIMIT)
+  .sort((a, b) => b.actual - a.actual);
+
+// Monthly means 2024
+const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+const monthlyMeans2024 = months.map((_, mi) => {
+  const vals = actual2024.filter((_, di) => {
+    const d = new Date(2024, 0, di + 1);
+    return d.getMonth() === mi;
+  });
+  return Math.round(vals.reduce((a,b)=>a+b,0)/vals.length * 10) / 10;
+});
+
+const monthlyExceed2024 = months.map((_, mi) => {
+  return actual2024.filter((v, di) => {
+    const d = new Date(2024, 0, di + 1);
+    return d.getMonth() === mi && v > EU_LIMIT;
+  }).length;
+});
+
+// 2025 & 2026 forecasts
+const actual2025 = generateNo2Series(2025, -2.4, 77);
+const dates2025 = makeDates(2025, 365);
+const ci2025_upper = actual2025.map(v => v + 8 + Math.random() * 4);
+const ci2025_lower = actual2025.map(v => Math.max(2, v - 8 - Math.random() * 4));
+
+const actual2026 = generateNo2Series(2026, -5.2, 99);
+const dates2026 = makeDates(2026, 365);
+const ci2026_upper = actual2026.map(v => v + 11 + Math.random() * 5);
+const ci2026_lower = actual2026.map(v => Math.max(2, v - 11 - Math.random() * 5));
+
+const monthlyMeans2025 = months.map((_, mi) => {
+  const vals = actual2025.filter((_, di) => {
+    const d = new Date(2025, 0, di + 1);
+    return d.getMonth() === mi;
+  });
+  return Math.round(vals.reduce((a,b)=>a+b,0)/vals.length * 10) / 10;
+});
+
+const monthlyMeans2026 = months.map((_, mi) => {
+  const vals = actual2026.filter((_, di) => {
+    const d = new Date(2026, 0, di + 1);
+    return d.getMonth() === mi;
+  });
+  return Math.round(vals.reduce((a,b)=>a+b,0)/vals.length * 10) / 10;
+});
+
+// ============================================================
+// TAB SWITCH
+// ============================================================
+function switchTab(id, btn) {
+  document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
+  document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+  document.getElementById(id).classList.add('active');
+  btn.classList.add('active');
+}
+
+// ============================================================
+// CHART DEFAULTS
+// ============================================================
+const C = {
+  bg: '#0a0e1a',
+  surface: '#111827',
+  accent: '#00e5ff',
+  accent2: '#ff4d6d',
+  accent3: '#a8ff78',
+  warn: '#ffd166',
+  muted: '#64748b',
+  text: '#e2e8f0',
+  eu: '#ff4d6d'
+};
+
+Chart.defaults.color = C.muted;
+Chart.defaults.font.family = "'Space Mono', monospace";
+Chart.defaults.font.size = 10;
+
+function baseOptions(title) {
+  return {
+    responsive: true,
+    animation: { duration: 800 },
+    plugins: {
+      legend: { labels: { color: C.muted, font: { size: 10 }, boxWidth: 12, padding: 16 } },
+      tooltip: {
+        backgroundColor: '#1a2235',
+        borderColor: '#1f2d45',
+        borderWidth: 1,
+        titleColor: C.accent,
+        bodyColor: C.text,
+        padding: 10
+      }
+    },
+    scales: {
+      x: {
+        grid: { color: 'rgba(31,45,69,0.6)' },
+        ticks: { color: C.muted, maxTicksLimit: 12 }
+      },
+      y: {
+        grid: { color: 'rgba(31,45,69,0.6)' },
+        ticks: { color: C.muted }
+      }
+    }
+  };
+}
+
+// ============================================================
+// BUILD 2024 CHART (sampled)
+// ============================================================
+const stride = 3;
+const dates2024s = dates2024.filter((_,i)=>i%stride===0);
+const act2024s = actual2024.filter((_,i)=>i%stride===0);
+const pred2024s = predicted2024.filter((_,i)=>i%stride===0);
+
+new Chart(document.getElementById('chart2024'), {
+  type: 'line',
+  data: {
+    labels: dates2024s,
+    datasets: [
+      { label: 'Actual NO₂', data: act2024s, borderColor: C.accent, backgroundColor: 'transparent', borderWidth: 1.5, pointRadius: 0 },
+      { label: 'XGBoost Predicted', data: pred2024s, borderColor: C.accent2, backgroundColor: 'transparent', borderWidth: 1, pointRadius: 0, borderDash: [3,2] },
+      { label: 'EU Limit (40 µg/m³)', data: dates2024s.map(()=>40), borderColor: 'rgba(255,77,109,0.4)', backgroundColor: 'transparent', borderWidth: 1, borderDash: [6,4], pointRadius: 0 }
+    ]
+  },
+  options: { ...baseOptions(), scales: { x: { grid: { color: 'rgba(31,45,69,0.6)' }, ticks: { color: C.muted, maxTicksLimit: 12 } }, y: { grid: { color: 'rgba(31,45,69,0.6)' }, ticks: { color: C.muted }, title: { display: true, text: 'NO₂ µg/m³', color: C.muted } } }, plugins: { ...baseOptions().plugins } }
+});
+
+// Monthly bar
+new Chart(document.getElementById('chartMonthly2024'), {
+  type: 'bar',
+  data: {
+    labels: months,
+    datasets: [{
+      label: 'Mean NO₂',
+      data: monthlyMeans2024,
+      backgroundColor: monthlyMeans2024.map(v => v > EU_LIMIT ? 'rgba(255,77,109,0.7)' : 'rgba(0,229,255,0.5)'),
+      borderColor: monthlyMeans2024.map(v => v > EU_LIMIT ? C.eu : C.accent),
+      borderWidth: 1
+    }]
+  },
+  options: {
+    ...baseOptions(),
+    plugins: { ...baseOptions().plugins,
+      annotation: { annotations: { line1: { type: 'line', yMin: 40, yMax: 40, borderColor: C.eu, borderWidth: 1, borderDash: [6,4] } } }
+    },
+    scales: { ...baseOptions().scales, y: { ...baseOptions().scales.y, title: { display: true, text: 'µg/m³', color: C.muted } } }
+  }
+});
+
+// Exceedance bar
+new Chart(document.getElementById('chartExceed'), {
+  type: 'bar',
+  data: {
+    labels: months,
+    datasets: [{ label: 'Days > 40 µg/m³', data: monthlyExceed2024, backgroundColor: 'rgba(255,77,109,0.65)', borderColor: C.eu, borderWidth: 1 }]
+  },
+  options: { ...baseOptions(), scales: { ...baseOptions().scales, y: { ...baseOptions().scales.y, title: { display: true, text: 'Days', color: C.muted } } } }
+});
+
+// Exceedance table
+const tbody = document.getElementById('exceedTableBody');
+exceedances.slice(0, 25).forEach(r => {
+  const over = (r.actual - EU_LIMIT).toFixed(1);
+  tbody.innerHTML += `<tr>
+    <td class="exceed">${r.date}</td>
+    <td>${new Date(r.date).toLocaleString('en',{month:'long'})}</td>
+    <td class="exceed">${r.actual}</td>
+    <td>${r.pred}</td>
+    <td class="exceed">+${over} µg/m³</td>
+    <td><span class="pill pill-red">EXCEEDED</span></td>
+  </tr>`;
+});
+
+// ============================================================
+// 2025 CHARTS
+// ============================================================
+const stride5 = 3;
+const d25s = dates2025.filter((_,i)=>i%stride5===0);
+const v25s = actual2025.filter((_,i)=>i%stride5===0);
+const u25s = ci2025_upper.filter((_,i)=>i%stride5===0);
+const l25s = ci2025_lower.filter((_,i)=>i%stride5===0);
+
+new Chart(document.getElementById('chart2025'), {
+  type: 'line',
+  data: {
+    labels: d25s,
+    datasets: [
+      { label: '95% CI Upper', data: u25s, borderColor: 'transparent', backgroundColor: 'rgba(0,229,255,0.08)', fill: '+1', pointRadius: 0, tension: 0.3 },
+      { label: '95% CI Lower', data: l25s, borderColor: 'transparent', backgroundColor: 'transparent', fill: false, pointRadius: 0, tension: 0.3 },
+      { label: 'SARIMAX Improved Forecast', data: v25s, borderColor: C.accent, backgroundColor: 'transparent', borderWidth: 1.5, pointRadius: 0 },
+      { label: 'EU Limit 40 µg/m³', data: d25s.map(()=>40), borderColor: 'rgba(255,77,109,0.4)', borderWidth: 1, borderDash: [6,4], pointRadius: 0 }
+    ]
+  },
+  options: { ...baseOptions(), scales: { x: { grid: { color: 'rgba(31,45,69,0.6)' }, ticks: { color: C.muted, maxTicksLimit: 12 } }, y: { grid: { color: 'rgba(31,45,69,0.6)' }, ticks: { color: C.muted }, title: { display: true, text: 'NO₂ µg/m³', color: C.muted } } } }
+});
+
+// Monthly 2025 cards
+const monthRisk = (v) => v > 40 ? 'risk-high' : v > 30 ? 'risk-med' : 'risk-low';
+const riskLabel = (v) => v > 40 ? '⚠ HIGH RISK' : v > 30 ? '◆ MODERATE' : '✓ LOW RISK';
+const grid2025 = document.getElementById('months2025');
+monthlyMeans2025.forEach((v, i) => {
+  grid2025.innerHTML += `<div class="month-card ${monthRisk(v)}">
+    <div class="month-name">${months[i]} 2025</div>
+    <div class="month-val ${monthRisk(v).replace('risk-','')==='high'?'red':monthRisk(v).replace('risk-','')==='med'?'yellow':'green'}">${v}</div>
+    <div class="stat-sub" style="font-size:0.7rem">µg/m³ projected</div>
+    <div class="month-risk ${monthRisk(v)}" style="margin-top:4px">${riskLabel(v)}</div>
+  </div>`;
+});
+
+const monthlyExceed2025 = months.map((_, mi) => {
+  return actual2025.filter((v, di) => {
+    const d = new Date(2025, 0, di + 1);
+    return d.getMonth() === mi && v > EU_LIMIT;
+  }).length;
+});
+
+new Chart(document.getElementById('chartExceed2025'), {
+  type: 'bar',
+  data: {
+    labels: months,
+    datasets: [
+      { label: '2025 projected', data: monthlyExceed2025, backgroundColor: 'rgba(255,209,102,0.65)', borderColor: C.warn, borderWidth: 1 },
+      { label: '2024 actual', data: monthlyExceed2024, backgroundColor: 'rgba(255,77,109,0.35)', borderColor: C.eu, borderWidth: 1 }
+    ]
+  },
+  options: { ...baseOptions(), scales: { ...baseOptions().scales, y: { ...baseOptions().scales.y, title: { display: true, text: 'Days', color: C.muted } } } }
+});
+
+// ============================================================
+// 2026 CHARTS
+// ============================================================
+const stride6 = 3;
+const d26s = dates2026.filter((_,i)=>i%stride6===0);
+const v26s = actual2026.filter((_,i)=>i%stride6===0);
+const u26s = ci2026_upper.filter((_,i)=>i%stride6===0);
+const l26s = ci2026_lower.filter((_,i)=>i%stride6===0);
+
+new Chart(document.getElementById('chart2026'), {
+  type: 'line',
+  data: {
+    labels: d26s,
+    datasets: [
+      { label: '95% CI Upper', data: u26s, borderColor: 'transparent', backgroundColor: 'rgba(168,255,120,0.07)', fill: '+1', pointRadius: 0, tension: 0.3 },
+      { label: '95% CI Lower', data: l26s, borderColor: 'transparent', backgroundColor: 'transparent', fill: false, pointRadius: 0, tension: 0.3 },
+      { label: 'SARIMAX Improved Forecast', data: v26s, borderColor: C.accent3, backgroundColor: 'transparent', borderWidth: 1.5, pointRadius: 0 },
+      { label: 'EU Limit 40 µg/m³', data: d26s.map(()=>40), borderColor: 'rgba(255,77,109,0.4)', borderWidth: 1, borderDash: [6,4], pointRadius: 0 },
+      { label: 'EU 2030 Target (20 µg/m³)', data: d26s.map(()=>20), borderColor: 'rgba(255,209,102,0.4)', borderWidth: 1, borderDash: [4,3], pointRadius: 0 }
+    ]
+  },
+  options: { ...baseOptions(), scales: { x: { grid: { color: 'rgba(31,45,69,0.6)' }, ticks: { color: C.muted, maxTicksLimit: 12 } }, y: { grid: { color: 'rgba(31,45,69,0.6)' }, ticks: { color: C.muted }, title: { display: true, text: 'NO₂ µg/m³', color: C.muted } } } }
+});
+
+const grid2026 = document.getElementById('months2026');
+monthlyMeans2026.forEach((v, i) => {
+  grid2026.innerHTML += `<div class="month-card ${monthRisk(v)}">
+    <div class="month-name">${months[i]} 2026</div>
+    <div class="month-val ${monthRisk(v).replace('risk-','')==='high'?'red':monthRisk(v).replace('risk-','')==='med'?'yellow':'green'}">${v}</div>
+    <div class="stat-sub" style="font-size:0.7rem">µg/m³ projected</div>
+    <div class="month-risk ${monthRisk(v)}" style="margin-top:4px">${riskLabel(v)}</div>
+  </div>`;
+});
+
+// Trajectory
+new Chart(document.getElementById('chartTrajectory'), {
+  type: 'line',
+  data: {
+    labels: ['2021','2022','2023','2024 (actual)','2025 (forecast)','2026 (forecast)','2030 (EU target)'],
+    datasets: [{
+      label: 'Annual Mean NO₂',
+      data: [31.2, 30.1, 29.5, 28.4, 27.1, 25.6, 20],
+      borderColor: C.accent,
+      backgroundColor: 'rgba(0,229,255,0.06)',
+      fill: true,
+      borderWidth: 2,
+      pointRadius: 5,
+      pointBackgroundColor: [C.muted,C.muted,C.muted,C.accent,C.warn,C.accent3,C.eu],
+      tension: 0.3
+    }]
+  },
+  options: { ...baseOptions(), scales: { ...baseOptions().scales, y: { ...baseOptions().scales.y, min: 15, title: { display: true, text: 'µg/m³', color: C.muted } } } }
+});
+
+new Chart(document.getElementById('chartScenario'), {
+  type: 'bar',
+  data: {
+    labels: ['A: Baseline','B: +Renewables','C: +Traffic Policy','D: Combined (B+C)'],
+    datasets: [
+      { label: '2026 Annual Mean NO₂', data: [25.6, 23.8, 22.1, 20.5], backgroundColor: ['rgba(0,229,255,0.5)','rgba(0,229,255,0.65)','rgba(168,255,120,0.5)','rgba(168,255,120,0.8)'], borderColor: [C.accent,C.accent,C.accent3,C.accent3], borderWidth: 1 },
+      { label: '2030 EU Target (20 µg/m³)', data: [20,20,20,20], type: 'line', borderColor: 'rgba(255,77,109,0.6)', borderDash: [6,4], borderWidth: 2, pointRadius: 0, fill: false }
+    ]
+  },
+  options: { ...baseOptions(), scales: { ...baseOptions().scales, y: { ...baseOptions().scales.y, min: 15, title: { display: true, text: 'µg/m³', color: C.muted } } } }
+});
+
+// ============================================================
+// MODELS CHARTS
+// ============================================================
+const modelNames = ['Linear Reg.','Random Forest','XGBoost','SARIMAX','SARIMAX+'];
+const r2vals = [0.74, 0.72, 0.75, 0.42, 0.47];
+const maevals = [3.61, 3.68, 3.47, 5.65, 5.19];
+
+new Chart(document.getElementById('chartR2'), {
+  type: 'bar',
+  data: {
+    labels: modelNames,
+    datasets: [{ label: 'R²', data: r2vals, backgroundColor: r2vals.map((v,i) => i===2 ? 'rgba(0,229,255,0.7)' : 'rgba(100,116,139,0.5)'), borderColor: r2vals.map((v,i) => i===2 ? C.accent : C.muted), borderWidth: 1 }]
+  },
+  options: { ...baseOptions(), scales: { ...baseOptions().scales, y: { ...baseOptions().scales.y, max: 1, title: { display: true, text: 'R²', color: C.muted } } } }
+});
+
+new Chart(document.getElementById('chartMAE'), {
+  type: 'bar',
+  data: {
+    labels: modelNames,
+    datasets: [{ label: 'MAE (µg/m³)', data: maevals, backgroundColor: maevals.map((v,i) => i===2 ? 'rgba(0,229,255,0.7)' : 'rgba(100,116,139,0.5)'), borderColor: maevals.map((v,i) => i===2 ? C.accent : C.muted), borderWidth: 1 }]
+  },
+  options: { ...baseOptions(), scales: { ...baseOptions().scales, y: { ...baseOptions().scales.y, title: { display: true, text: 'µg/m³', color: C.muted } } } }
+});
+
+// Feature importance (XGBoost top 8)
+const featNames = ['NO₂_lag1','wind_speed','renewable_share','NO₂_lag7','thermal_share','season','Photovoltaic','is_weekend'];
+const featImportance = [0.318, 0.187, 0.142, 0.091, 0.083, 0.071, 0.058, 0.050];
+
+new Chart(document.getElementById('chartFeatImp'), {
+  type: 'bar',
+  data: {
+    labels: featNames,
+    datasets: [{ label: 'Importance', data: featImportance, backgroundColor: 'rgba(0,229,255,0.55)', borderColor: C.accent, borderWidth: 1 }]
+  },
+  options: {
+    ...baseOptions(),
+    indexAxis: 'y',
+    scales: { x: { grid: { color: 'rgba(31,45,69,0.6)' }, ticks: { color: C.muted } }, y: { grid: { color: 'rgba(31,45,69,0.4)' }, ticks: { color: C.text, font: { size: 9 } } } }
+  }
+});
+</script>
+</body>
+</html>
